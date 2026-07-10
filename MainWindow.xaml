@@ -6,9 +6,12 @@
     xmlns:local="clr-namespace:ColorTool"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     x:Name="myWindow"
-    Title="MainWindow"
-    Width="800"
-    Height="450"
+    Title="配色工具"
+    Width="1340"
+    Height="800"
+    MinWidth="1060"
+    MinHeight="740"
+    WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
     <WindowChrome.WindowChrome>
         <WindowChrome
@@ -79,6 +82,18 @@
 
             <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
 
+                <Button
+                    x:Name="MapToggleButton"
+                    Width="90"
+                    Click="MapToggle_Click"
+                    Style="{StaticResource CaptionButtonStyle}">
+                    <TextBlock
+                        x:Name="MapToggleText"
+                        FontSize="12"
+                        Foreground="#4EC9B0"
+                        Text="色調地圖 ▸" />
+                </Button>
+
                 <Button Click="MinimizeButton_Click" Style="{StaticResource CaptionButtonStyle}">
                     <Path
                         HorizontalAlignment="Center"
@@ -118,154 +133,152 @@
             </StackPanel>
         </Grid>
 
-        <Grid Grid.Row="1" Margin="20">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+        <Grid Grid.Row="1" Margin="20,12,20,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MinWidth="330" />
+                <ColumnDefinition Width="4*" MinWidth="340" />
+                <ColumnDefinition x:Name="MapColumn" Width="3.5*" />
+            </Grid.ColumnDefinitions>
 
-            <Grid Grid.Row="0" Margin="0,0,0,20">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+            <!--  左欄：現有的雙色相環＋滑桿＋數值＋目前色調  -->
+            <Grid Grid.Column="0" Margin="0,0,14,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-                <StackPanel
-                    Grid.Column="0"
-                    Margin="0,0,20,0"
-                    HorizontalAlignment="Center">
-                    <TextBlock
-                        Margin="0,0,0,10"
-                        HorizontalAlignment="Center"
-                        FontWeight="Bold"
-                        Foreground="#AAAAAA"
-                        Text="HSL (三角形)" />
-                    <Grid Width="180" Height="180">
-                        <Image
-                            x:Name="HueRingImage_HSL"
-                            Cursor="Cross"
-                            MouseLeftButtonDown="HueRing_Mouse"
-                            MouseMove="HueRing_Mouse"
-                            RenderOptions.BitmapScalingMode="HighQuality" />
-                        <Canvas IsHitTestVisible="False">
-                            <Ellipse
-                                x:Name="HueSelector_HSL"
-                                Width="14"
-                                Height="14"
-                                Fill="Transparent"
-                                Stroke="White"
-                                StrokeThickness="2.5">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="HueSelectorTransform_HSL" X="0" Y="0" />
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-                        </Canvas>
+                <Viewbox
+                    Grid.Row="0"
+                    MaxHeight="205"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Stretch="Uniform">
+                    <StackPanel Orientation="Horizontal">
+                        <StackPanel Margin="0,0,20,0">
+                            <TextBlock
+                                Margin="0,0,0,8"
+                                HorizontalAlignment="Center"
+                                FontWeight="Bold"
+                                Foreground="#AAAAAA"
+                                Text="HSL (三角形)" />
+                            <Grid Width="180" Height="180">
+                                <Image
+                                    x:Name="HueRingImage_HSL"
+                                    Cursor="Cross"
+                                    MouseLeftButtonDown="HueRing_Mouse"
+                                    MouseMove="HueRing_Mouse"
+                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                                <Canvas IsHitTestVisible="False">
+                                    <Ellipse
+                                        x:Name="HueSelector_HSL"
+                                        Width="14"
+                                        Height="14"
+                                        Fill="Transparent"
+                                        Stroke="White"
+                                        StrokeThickness="2.5">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="HueSelectorTransform_HSL" X="0" Y="0" />
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Canvas>
 
-                        <Grid
-                            Width="120"
-                            Height="120"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                            <Image
-                                x:Name="InnerShapeImage_HSL"
-                                Cursor="Cross"
-                                MouseLeftButtonDown="Triangle_Mouse"
-                                MouseMove="Triangle_Mouse"
-                                RenderOptions.BitmapScalingMode="HighQuality" />
-                            <Canvas IsHitTestVisible="False">
-                                <Ellipse
-                                    x:Name="SlSelector_HSL"
-                                    Width="10"
-                                    Height="10"
-                                    Fill="White"
-                                    Stroke="Black"
-                                    StrokeThickness="1.5">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="SlSelectorTransform_HSL" X="60" Y="60" />
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Canvas>
-                        </Grid>
-                    </Grid>
-                </StackPanel>
+                                <Grid
+                                    Width="120"
+                                    Height="120"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                                    <Image
+                                        x:Name="InnerShapeImage_HSL"
+                                        Cursor="Cross"
+                                        MouseLeftButtonDown="Triangle_Mouse"
+                                        MouseMove="Triangle_Mouse"
+                                        RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <Canvas IsHitTestVisible="False">
+                                        <Ellipse
+                                            x:Name="SlSelector_HSL"
+                                            Width="10"
+                                            Height="10"
+                                            Fill="White"
+                                            Stroke="Black"
+                                            StrokeThickness="1.5">
+                                            <Ellipse.RenderTransform>
+                                                <TranslateTransform x:Name="SlSelectorTransform_HSL" X="60" Y="60" />
+                                            </Ellipse.RenderTransform>
+                                        </Ellipse>
+                                    </Canvas>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
 
-                <StackPanel
-                    Grid.Column="1"
-                    Margin="0,0,20,0"
-                    HorizontalAlignment="Center">
-                    <TextBlock
-                        Margin="0,0,0,10"
-                        HorizontalAlignment="Center"
-                        FontWeight="Bold"
-                        Foreground="#AAAAAA"
-                        Text="HSV (方形)" />
-                    <Grid Width="180" Height="180">
-                        <Image
-                            x:Name="HueRingImage_HSV"
-                            Cursor="Cross"
-                            MouseLeftButtonDown="HueRing_Mouse"
-                            MouseMove="HueRing_Mouse"
-                            RenderOptions.BitmapScalingMode="HighQuality" />
-                        <Canvas IsHitTestVisible="False">
-                            <Ellipse
-                                x:Name="HueSelector_HSV"
-                                Width="14"
-                                Height="14"
-                                Fill="Transparent"
-                                Stroke="White"
-                                StrokeThickness="2.5">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="HueSelectorTransform_HSV" X="0" Y="0" />
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-                        </Canvas>
+                        <StackPanel>
+                            <TextBlock
+                                Margin="0,0,0,8"
+                                HorizontalAlignment="Center"
+                                FontWeight="Bold"
+                                Foreground="#AAAAAA"
+                                Text="HSV (方形)" />
+                            <Grid Width="180" Height="180">
+                                <Image
+                                    x:Name="HueRingImage_HSV"
+                                    Cursor="Cross"
+                                    MouseLeftButtonDown="HueRing_Mouse"
+                                    MouseMove="HueRing_Mouse"
+                                    RenderOptions.BitmapScalingMode="HighQuality" />
+                                <Canvas IsHitTestVisible="False">
+                                    <Ellipse
+                                        x:Name="HueSelector_HSV"
+                                        Width="14"
+                                        Height="14"
+                                        Fill="Transparent"
+                                        Stroke="White"
+                                        StrokeThickness="2.5">
+                                        <Ellipse.RenderTransform>
+                                            <TranslateTransform x:Name="HueSelectorTransform_HSV" X="0" Y="0" />
+                                        </Ellipse.RenderTransform>
+                                    </Ellipse>
+                                </Canvas>
 
-                        <Grid
-                            Width="120"
-                            Height="120"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                            <Image
-                                x:Name="InnerShapeImage_HSV"
-                                Cursor="Cross"
-                                MouseLeftButtonDown="Square_Mouse"
-                                MouseMove="Square_Mouse"
-                                RenderOptions.BitmapScalingMode="HighQuality" />
-                            <Canvas IsHitTestVisible="False">
-                                <Ellipse
-                                    x:Name="SlSelector_HSV"
-                                    Width="10"
-                                    Height="10"
-                                    Fill="White"
-                                    Stroke="Black"
-                                    StrokeThickness="1.5">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="SlSelectorTransform_HSV" X="60" Y="60" />
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Canvas>
-                        </Grid>
-                    </Grid>
-                </StackPanel>
+                                <Grid
+                                    Width="120"
+                                    Height="120"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                                    <Image
+                                        x:Name="InnerShapeImage_HSV"
+                                        Cursor="Cross"
+                                        MouseLeftButtonDown="Square_Mouse"
+                                        MouseMove="Square_Mouse"
+                                        RenderOptions.BitmapScalingMode="HighQuality" />
+                                    <Canvas IsHitTestVisible="False">
+                                        <Ellipse
+                                            x:Name="SlSelector_HSV"
+                                            Width="10"
+                                            Height="10"
+                                            Fill="White"
+                                            Stroke="Black"
+                                            StrokeThickness="1.5">
+                                            <Ellipse.RenderTransform>
+                                                <TranslateTransform x:Name="SlSelectorTransform_HSV" X="60" Y="60" />
+                                            </Ellipse.RenderTransform>
+                                        </Ellipse>
+                                    </Canvas>
+                                </Grid>
+                            </Grid>
+                        </StackPanel>
+                    </StackPanel>
+                </Viewbox>
 
-                <Border
-                    x:Name="ColorDisplay"
-                    Grid.Column="2"
-                    Background="Black"
-                    BorderBrush="#333333"
-                    BorderThickness="1"
-                    CornerRadius="10" />
-            </Grid>
-
-            <StackPanel Grid.Row="1" Orientation="Vertical">
                 <Button
                     x:Name="ModeToggleButton"
-                    Width="250"
+                    Grid.Row="1"
                     Height="30"
-                    Margin="0,0,0,15"
-                    HorizontalAlignment="Left"
+                    Margin="0,10,0,10"
+                    HorizontalAlignment="Stretch"
                     Background="#2D2D30"
                     BorderBrush="#3E3E42"
                     BorderThickness="1"
@@ -275,111 +288,340 @@
                     FontWeight="Bold"
                     Foreground="#4EC9B0" />
 
-                <TextBlock
-                    Margin="0,5,0,5"
-                    FontWeight="Bold"
-                    Foreground="#4EC9B0"
-                    Text="色相 (H) - 顏色種類" />
-                <Slider
-                    x:Name="H_Slider"
-                    Background="#333333"
-                    Foreground="#555555"
-                    IsSnapToTickEnabled="True"
-                    Maximum="360"
-                    Minimum="0"
-                    Opacity="0.8"
-                    TickFrequency="1"
-                    ValueChanged="HlsSlider_ValueChanged"
-                    Value="0" />
-                <TextBlock
-                    x:Name="H_ValueText"
-                    Margin="0,0,0,10"
-                    HorizontalAlignment="Right"
-                    Foreground="#888888"
-                    Text="0°" />
+                <StackPanel Grid.Row="2">
+                    <TextBlock
+                        Margin="0,2,0,4"
+                        FontWeight="Bold"
+                        Foreground="#4EC9B0"
+                        Text="色相 (H) - 顏色種類" />
+                    <Slider
+                        x:Name="H_Slider"
+                        Background="#333333"
+                        Foreground="#555555"
+                        IsSnapToTickEnabled="True"
+                        Maximum="360"
+                        Minimum="0"
+                        Opacity="0.8"
+                        TickFrequency="1"
+                        ValueChanged="HlsSlider_ValueChanged"
+                        Value="0" />
+                    <TextBlock
+                        x:Name="H_ValueText"
+                        Margin="0,0,0,6"
+                        HorizontalAlignment="Right"
+                        Foreground="#888888"
+                        Text="0°" />
 
-                <TextBlock
-                    x:Name="L_Label"
-                    Margin="0,5,0,5"
-                    FontWeight="Bold"
-                    Foreground="#CE9178"
-                    Text="亮度 (L) - 明暗程度" />
-                <Slider
-                    x:Name="L_Slider"
-                    Background="#333333"
-                    Foreground="#555555"
-                    IsSnapToTickEnabled="True"
-                    Maximum="100"
-                    Minimum="0"
-                    Opacity="0.8"
-                    TickFrequency="1"
-                    ValueChanged="HlsSlider_ValueChanged"
-                    Value="50" />
-                <TextBlock
-                    x:Name="L_ValueText"
-                    Margin="0,0,0,10"
-                    HorizontalAlignment="Right"
-                    Foreground="#888888"
-                    Text="50%" />
+                    <TextBlock
+                        x:Name="L_Label"
+                        Margin="0,2,0,4"
+                        FontWeight="Bold"
+                        Foreground="#CE9178"
+                        Text="亮度 (L) - 明暗程度" />
+                    <Slider
+                        x:Name="L_Slider"
+                        Background="#333333"
+                        Foreground="#555555"
+                        IsSnapToTickEnabled="True"
+                        Maximum="100"
+                        Minimum="0"
+                        Opacity="0.8"
+                        TickFrequency="1"
+                        ValueChanged="HlsSlider_ValueChanged"
+                        Value="50" />
+                    <TextBlock
+                        x:Name="L_ValueText"
+                        Margin="0,0,0,6"
+                        HorizontalAlignment="Right"
+                        Foreground="#888888"
+                        Text="50%" />
 
-                <TextBlock
-                    x:Name="S_Label"
-                    Margin="0,5,0,5"
-                    FontWeight="Bold"
-                    Foreground="#D16969"
-                    Text="飽和度 (S) [HLS] - 鮮豔程度" />
-                <Slider
-                    x:Name="S_Slider"
-                    Background="#333333"
-                    Foreground="#555555"
-                    IsSnapToTickEnabled="True"
-                    Maximum="100"
-                    Minimum="0"
-                    Opacity="0.8"
-                    TickFrequency="1"
-                    ValueChanged="HlsSlider_ValueChanged"
-                    Value="100" />
-                <TextBlock
-                    x:Name="S_ValueText"
-                    Margin="0,0,0,20"
-                    HorizontalAlignment="Right"
-                    Foreground="#888888"
-                    Text="100%" />
-            </StackPanel>
+                    <TextBlock
+                        x:Name="S_Label"
+                        Margin="0,2,0,4"
+                        FontWeight="Bold"
+                        Foreground="#D16969"
+                        Text="飽和度 (S) [HLS] - 鮮豔程度" />
+                    <Slider
+                        x:Name="S_Slider"
+                        Background="#333333"
+                        Foreground="#555555"
+                        IsSnapToTickEnabled="True"
+                        Maximum="100"
+                        Minimum="0"
+                        Opacity="0.8"
+                        TickFrequency="1"
+                        ValueChanged="HlsSlider_ValueChanged"
+                        Value="100" />
+                    <TextBlock
+                        x:Name="S_ValueText"
+                        Margin="0,0,0,10"
+                        HorizontalAlignment="Right"
+                        Foreground="#888888"
+                        Text="100%" />
+                </StackPanel>
 
-            <UniformGrid
-                Grid.Row="2"
-                Columns="2"
-                Rows="2">
-                <TextBlock
-                    x:Name="RgbText"
-                    Margin="5"
-                    FontSize="14"
-                    FontWeight="Medium"
-                    Foreground="#DDDDDD"
-                    Text="RGB: 0, 0, 0" />
-                <TextBlock
-                    x:Name="CmykText"
-                    Margin="5"
-                    FontSize="14"
-                    FontWeight="Medium"
-                    Foreground="#DDDDDD"
-                    Text="CMYK: 0%, 0%, 0%, 100%" />
-                <TextBlock
-                    x:Name="HsvText"
-                    Margin="5"
-                    FontSize="14"
-                    FontWeight="Medium"
-                    Foreground="#DDDDDD"
-                    Text="HSV: 0°, 0%, 0%" />
-                <TextBlock
-                    x:Name="HlsText"
-                    Margin="5"
-                    FontSize="14"
-                    FontWeight="Medium"
-                    Foreground="#DDDDDD"
-                    Text="HLS: 0°, 50%, 100%" />
-            </UniformGrid>
+                <!--  近似色／漸層色色票（OkLCH），主色置中  -->
+                <StackPanel Grid.Row="3" Margin="0,2,0,8">
+                    <StackPanel Orientation="Horizontal">
+                        <Border
+                            x:Name="SimilarTab"
+                            Padding="14,5"
+                            Background="#1A1A1A"
+                            CornerRadius="6,6,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="SwatchTab_Click">
+                            <TextBlock
+                                x:Name="SimilarTabText"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="#4EC9B0"
+                                Text="近似色" />
+                        </Border>
+                        <Border
+                            x:Name="GradientTab"
+                            Padding="14,5"
+                            Background="Transparent"
+                            CornerRadius="6,6,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="SwatchTab_Click">
+                            <TextBlock
+                                x:Name="GradientTabText"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="#777777"
+                                Text="漸層色" />
+                        </Border>
+                    </StackPanel>
+                    <Border
+                        Padding="6"
+                        Background="#1A1A1A"
+                        CornerRadius="0,6,6,6">
+                        <UniformGrid
+                            x:Name="SwatchGrid"
+                            Height="110"
+                            Columns="7"
+                            Rows="5" />
+                    </Border>
+                </StackPanel>
+
+                <UniformGrid
+                    Grid.Row="4"
+                    Columns="2"
+                    Rows="2">
+                    <TextBlock
+                        x:Name="RgbText"
+                        Margin="0,3"
+                        FontSize="13"
+                        FontWeight="Medium"
+                        Foreground="#DDDDDD"
+                        Text="RGB: 0, 0, 0" />
+                    <TextBlock
+                        x:Name="CmykText"
+                        Margin="0,3"
+                        FontSize="13"
+                        FontWeight="Medium"
+                        Foreground="#DDDDDD"
+                        Text="CMYK: 0%, 0%, 0%, 100%" />
+                    <TextBlock
+                        x:Name="HsvText"
+                        Margin="0,3"
+                        FontSize="13"
+                        FontWeight="Medium"
+                        Foreground="#DDDDDD"
+                        Text="HSV: 0°, 0%, 0%" />
+                    <TextBlock
+                        x:Name="HlsText"
+                        Margin="0,3"
+                        FontSize="13"
+                        FontWeight="Medium"
+                        Foreground="#DDDDDD"
+                        Text="HLS: 0°, 50%, 100%" />
+                </UniformGrid>
+
+                <StackPanel
+                    Grid.Row="5"
+                    Margin="0,10,0,0"
+                    Orientation="Horizontal">
+                    <Border
+                        x:Name="ColorDisplay"
+                        Width="46"
+                        Height="46"
+                        Background="Black"
+                        BorderBrush="#333333"
+                        BorderThickness="1"
+                        CornerRadius="8" />
+                    <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                        <TextBlock
+                            x:Name="ToneNameText"
+                            FontSize="15"
+                            FontWeight="Bold"
+                            Foreground="#DDDDDD"
+                            Text="目前色調：—" />
+                        <TextBlock
+                            x:Name="ToneGroupText"
+                            FontSize="12"
+                            Foreground="#777777"
+                            Text="點擊色調地圖區塊可跳至該色調" />
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+
+            <!--  中欄：圖片分析（原圖隨視窗放大）  -->
+            <Grid Grid.Column="1" Margin="0,0,14,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="140" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="Bold"
+                        Foreground="#AAAAAA"
+                        Text="圖片分析" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <CheckBox
+                            x:Name="IgnoreBgCheck"
+                            Margin="0,0,12,0"
+                            VerticalAlignment="Center"
+                            Checked="IgnoreBg_Changed"
+                            Content="忽略背景"
+                            Foreground="#999999"
+                            IsChecked="True"
+                            Unchecked="IgnoreBg_Changed" />
+                        <Button
+                            x:Name="ImportImageButton"
+                            Width="110"
+                            Height="28"
+                            Background="#2D2D30"
+                            BorderBrush="#3E3E42"
+                            BorderThickness="1"
+                            Click="ImportImage_Click"
+                            Content="匯入圖片…"
+                            Cursor="Hand"
+                            Foreground="#CCCCCC" />
+                    </StackPanel>
+                </Grid>
+
+                <Border
+                    Grid.Row="1"
+                    Background="#1A1A1A"
+                    CornerRadius="6">
+                    <Grid>
+                        <TextBlock
+                            x:Name="PreviewPlaceholder"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            Foreground="#555555"
+                            Text="尚未匯入圖片" />
+                        <Image
+                            x:Name="AnalyzedImagePreview"
+                            Margin="6"
+                            Stretch="Uniform" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Row="2" Margin="0,10,0,0">
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="#999999"
+                        Text="配色角色（點擊套用）" />
+                    <StackPanel
+                        x:Name="DominantColorsPanel"
+                        Margin="0,6,0,0"
+                        Orientation="Horizontal" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="3" Margin="0,8,0,0">
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="#999999"
+                        Text="Hue &amp; Tone 分佈" />
+                    <Grid x:Name="HueToneGrid" Margin="0,6,0,0" />
+                </StackPanel>
+
+                <UniformGrid
+                    Grid.Row="4"
+                    Margin="0,8,0,0"
+                    Columns="2">
+                    <StackPanel HorizontalAlignment="Center">
+                        <Viewbox MaxHeight="120" Stretch="Uniform">
+                            <Canvas
+                                x:Name="HuePieCanvas"
+                                Width="110"
+                                Height="110" />
+                        </Viewbox>
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="12"
+                            Foreground="#999999"
+                            Text="色相平衡" />
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center">
+                        <Viewbox MaxHeight="120" Stretch="Uniform">
+                            <Canvas
+                                x:Name="TonePieCanvas"
+                                Width="110"
+                                Height="110" />
+                        </Viewbox>
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="12"
+                            Foreground="#999999"
+                            Text="色調平衡" />
+                    </StackPanel>
+                </UniformGrid>
+            </Grid>
+
+            <!--  右欄：可收合的 PCCS 色調地圖  -->
+            <Border
+                x:Name="MapPanel"
+                Grid.Column="2"
+                Padding="14,0,0,0"
+                BorderBrush="#2A2A2A"
+                BorderThickness="1,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock
+                        Margin="0,0,0,10"
+                        FontWeight="Bold"
+                        Foreground="#AAAAAA"
+                        Text="PCCS 色調地圖" />
+
+                    <Viewbox
+                        Grid.Row="1"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Stretch="Uniform">
+                        <StackPanel Orientation="Horizontal">
+                            <Grid
+                                x:Name="AchromaticBarGrid"
+                                Width="40"
+                                Height="312"
+                                Margin="0,24,10,24" />
+                            <Grid Width="370" Height="360">
+                                <Canvas
+                                    x:Name="PccsMapCanvas"
+                                    Background="Transparent"
+                                    Cursor="Cross"
+                                    MouseLeftButtonDown="PccsMapCanvas_Mouse" />
+                                <Canvas x:Name="PccsLabelCanvas" IsHitTestVisible="False" />
+                            </Grid>
+                        </StackPanel>
+                    </Viewbox>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>
