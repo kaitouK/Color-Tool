@@ -7,17 +7,30 @@ public class ImageAnalysisResult
 {
     public long Total;
     public long AchromaticCount;
-    public long[] HueCount = new long[12];
-    public Color[] HueAvg = new Color[12];
+    // 色相 24 格（每 15°，hueIdx = round(hue/15) % 24）
+    public long[] HueCount = new long[24];
+    public Color[] HueAvg = new Color[24];
     public Color AchromaticAvg;
     public long[] ToneCount = new long[17];
     public Color[] ToneAvg = new Color[17];
     // 有彩色調存 [toneIndex, hueIndex]；無彩色調一律存在 hueIndex 0
-    public long[,] CellCount = new long[17, 12];
-    public Color[,] CellAvg = new Color[17, 12];
+    public long[,] CellCount = new long[17, 24];
+    public Color[,] CellAvg = new Color[17, 24];
     // 無彩像素依明度 0~100 分十階（含兩端共 11 級）
     public long[] AchLevelCount = new long[11];
     public Color[] AchLevelAvg = new Color[11];
+    // ── 以下為甜甜圈圖專用統計（第二輪收集；「忽略背景」開啟時排除背景像素）──
+    public long PieTotal;
+    public long PieAchromaticCount;
+    public Color PieAchromaticAvg;
+    // 10 色相環（R/YR/Y/GY/G/BG/B/PB/P/RP，每 36°）——色相平衡甜甜圈用
+    public long[] Hue10Count = new long[10];
+    public Color[] Hue10Avg = new Color[10];
+    // 色調四大分類（鮮豔/明亮/昏暗/暗淡）——色調平衡甜甜圈用
+    public long[] GroupCount = new long[4];
+    public Color[] GroupAvg = new Color[4];
+    // OkLab L 四階明度佔比（0~0.25 / ~0.5 / ~0.75 / ~1）
+    public long[] LightnessCount = new long[4];
     public List<(string Role, Color Color, double Share, double Score)> Palette = new();
 }
 
@@ -54,11 +67,11 @@ public static class ImageAnalyzer
         conv.CopyPixels(data, stride, 0);
 
         var res = new ImageAnalysisResult();
-        long[,] hueSum = new long[12, 3];
+        long[,] hueSum = new long[24, 3];
         long[] achSum = new long[3];
         long[,] achLvlSum = new long[11, 3];
         long[,] toneSum = new long[17, 3];
-        long[,,] cellSum = new long[17, 12, 3];
+        long[,,] cellSum = new long[17, 24, 3];
         var samples = new List<int>(w * h);
 
         for (int i = 0; i < data.Length; i += 4)
@@ -74,7 +87,7 @@ public static class ImageAnalyzer
             if (!tone.IsAchromatic)
             {
                 (double hue, _, _) = ColorMath.RgbToHls(r, g, b);
-                hueIdx = ((int)Math.Round(hue / 30.0)) % 12;
+                hueIdx = ((int)Math.Round(hue / 15.0)) % 24;
                 res.HueCount[hueIdx]++;
                 hueSum[hueIdx, 0] += r; hueSum[hueIdx, 1] += g; hueSum[hueIdx, 2] += b;
             }
@@ -98,7 +111,7 @@ public static class ImageAnalyzer
             cellSum[tone.Index, col, 0] += r; cellSum[tone.Index, col, 1] += g; cellSum[tone.Index, col, 2] += b;
         }
 
-        for (int c = 0; c < 12; c++)
+        for (int c = 0; c < 24; c++)
             if (res.HueCount[c] > 0)
                 res.HueAvg[c] = Avg(hueSum[c, 0], hueSum[c, 1], hueSum[c, 2], res.HueCount[c]);
 
@@ -113,13 +126,65 @@ public static class ImageAnalyzer
         {
             if (res.ToneCount[t] > 0)
                 res.ToneAvg[t] = Avg(toneSum[t, 0], toneSum[t, 1], toneSum[t, 2], res.ToneCount[t]);
-            for (int c = 0; c < 12; c++)
+            for (int c = 0; c < 24; c++)
                 if (res.CellCount[t, c] > 0)
                     res.CellAvg[t, c] = Avg(cellSum[t, c, 0], cellSum[t, c, 1], cellSum[t, c, 2], res.CellCount[t, c]);
         }
 
-        BuildPalette(res, data, w, h, samples);
+        BuildPalette(res, data, w, h, samples, out byte[]? labels, out int bgId);
+        CollectPieStats(res, data, w, h, labels, bgId);
         return res;
+    }
+
+    // 甜甜圈圖的統計獨立成第二輪：偵測到背景時（僅在 IgnoreBackground 開啟）排除背景像素（實驗性）
+    private static void CollectPieStats(ImageAnalysisResult res, byte[] data, int w, int h, byte[]? labels, int bgId)
+    {
+        long[,] hue10Sum = new long[10, 3];
+        long[,] groupSum = new long[4, 3];
+        long[] achSum = new long[3];
+
+        int pxCount = w * h;
+        for (int p = 0; p < pxCount; p++)
+        {
+            int i = p * 4;
+            if (data[i + 3] < 128) continue;
+            if (bgId >= 0 && labels != null && labels[p] == bgId) continue;
+
+            byte b = data[i], g = data[i + 1], r = data[i + 2];
+            res.PieTotal++;
+
+            double okL = ColorMath.RgbToOklabL(r, g, b);
+            int lIdx = okL <= 0.25 ? 0 : okL <= 0.5 ? 1 : okL <= 0.75 ? 2 : 3;
+            res.LightnessCount[lIdx]++;
+
+            var tone = Pccs.ClassifyRgb(r / 255.0, g / 255.0, b / 255.0);
+            if (tone.IsAchromatic)
+            {
+                res.PieAchromaticCount++;
+                achSum[0] += r; achSum[1] += g; achSum[2] += b;
+                continue;
+            }
+
+            (double hue, _, _) = ColorMath.RgbToHls(r, g, b);
+            int h10 = ((int)Math.Round(hue / 36.0)) % 10;
+            res.Hue10Count[h10]++;
+            hue10Sum[h10, 0] += r; hue10Sum[h10, 1] += g; hue10Sum[h10, 2] += b;
+
+            int gIdx = tone.Group switch { "鮮豔" => 0, "明亮" => 1, "昏暗" => 2, _ => 3 };
+            res.GroupCount[gIdx]++;
+            groupSum[gIdx, 0] += r; groupSum[gIdx, 1] += g; groupSum[gIdx, 2] += b;
+        }
+
+        for (int c = 0; c < 10; c++)
+            if (res.Hue10Count[c] > 0)
+                res.Hue10Avg[c] = Avg(hue10Sum[c, 0], hue10Sum[c, 1], hue10Sum[c, 2], res.Hue10Count[c]);
+
+        for (int gI = 0; gI < 4; gI++)
+            if (res.GroupCount[gI] > 0)
+                res.GroupAvg[gI] = Avg(groupSum[gI, 0], groupSum[gI, 1], groupSum[gI, 2], res.GroupCount[gI]);
+
+        if (res.PieAchromaticCount > 0)
+            res.PieAchromaticAvg = Avg(achSum[0], achSum[1], achSum[2], res.PieAchromaticCount);
     }
 
     private static Color Avg(long r, long g, long b, long n) =>
@@ -128,8 +193,12 @@ public static class ImageAnalyzer
     // ==========================================
     // 配色角色與視覺重要性分數
     // ==========================================
-    private static void BuildPalette(ImageAnalysisResult res, byte[] data, int w, int h, List<int> samples)
+    private static void BuildPalette(ImageAnalysisResult res, byte[] data, int w, int h, List<int> samples,
+        out byte[]? labels, out int bgId)
     {
+        labels = null;
+        bgId = -1;
+
         var (centroids, counts) = KMeansCore(samples, 8);
         var ids = new List<int>();
         for (int j = 0; j < centroids.Length; j++)
@@ -139,7 +208,7 @@ public static class ImageAnalyzer
 
         // 全圖逐像素標記到最近的聚類，同時累計每群的平均飽和度
         int pxCount = w * h;
-        var labels = new byte[pxCount];
+        labels = new byte[pxCount];
         Array.Fill(labels, byte.MaxValue);
         var satSum = new double[k];
         var pixCnt = new long[k];
@@ -203,7 +272,6 @@ public static class ImageAnalyzer
         // 背景偵測：背景的特徵不是「白」而是「大面積貼著圖片四邊」——
         // 統計影像最外圈像素的聚類歸屬，某群佔邊框過半即視為背景。
         // 滿版照片的邊框會被多群瓜分、無人過半，天然不會誤殺。
-        int bgId = -1;
         if (IgnoreBackground && w > 2 && h > 2)
         {
             var borderCnt = new long[k];
@@ -227,7 +295,9 @@ public static class ImageAnalyzer
         long roleTotal = bgId >= 0 ? validTotal - pixCnt[bgId] : validTotal;
 
         // 依面積排序（背景群排除在角色之外）；主色＝最大群，Score 以主色為比較基準
-        var ordered = ids.Where(j => j != bgId).OrderByDescending(j => pixCnt[j]).ToList();
+        // （lambda 不能直接捕捉 out 參數，先複製成區域變數）
+        int excludeId = bgId;
+        var ordered = ids.Where(j => j != excludeId).OrderByDescending(j => pixCnt[j]).ToList();
         if (ordered.Count == 0) return;
         int mainId = ordered[0];
 

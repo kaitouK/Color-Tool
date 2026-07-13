@@ -89,8 +89,27 @@ public static class ColorMath
         return (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz));
     }
 
-    private static double SrgbToLinear(double c) =>
+    public static double SrgbToLinear(double c) =>
         c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+
+    // 線性 RGB 直接取 OkLab 明度 L（灰階／四階化與明度分析用，比完整 OkLCH 轉換省）
+    public static double OklabLFromLinear(double rl, double gl, double bl)
+    {
+        double l = 0.4122214708 * rl + 0.5363325363 * gl + 0.0514459929 * bl;
+        double m = 0.2119034982 * rl + 0.6806995451 * gl + 0.1073969566 * bl;
+        double s = 0.0883024619 * rl + 0.2817188376 * gl + 0.6299787005 * bl;
+        return 0.2104542553 * Math.Cbrt(l) + 0.7936177850 * Math.Cbrt(m) - 0.0040720468 * Math.Cbrt(s);
+    }
+
+    public static double RgbToOklabL(int r, int g, int b) =>
+        OklabLFromLinear(SrgbToLinear(r / 255.0), SrgbToLinear(g / 255.0), SrgbToLinear(b / 255.0));
+
+    // OkLab L 轉等亮度灰階值（C=0 時三個線性通道都等於 L³）
+    public static byte OklabLToGray(double okL)
+    {
+        double lin = okL * okL * okL;
+        return (byte)Math.Round(Math.Clamp(LinearToSrgb(lin), 0.0, 1.0) * 255.0);
+    }
 
     private static double LabF(double t) =>
         t > 216.0 / 24389.0 ? Math.Cbrt(t) : (24389.0 / 27.0 * t + 16.0) / 116.0;
@@ -148,8 +167,27 @@ public static class ColorMath
             (int)Math.Round(LinearToSrgb(Math.Clamp(bl, 0.0, 1.0)) * 255));
     }
 
-    private static double LinearToSrgb(double c) =>
+    public static double LinearToSrgb(double c) =>
         c <= 0.0031308 ? 12.92 * c : 1.055 * Math.Pow(c, 1.0 / 2.4) - 0.055;
+
+    // OkLCH 轉「未裁切」的線性 sRGB——調色盤引擎的色域內外判斷用
+    public static (double R, double G, double B) OklchToLinearSrgb(double okL, double c, double hDeg)
+    {
+        double hr = hDeg * Math.PI / 180.0;
+        double okA = c * Math.Cos(hr);
+        double okB = c * Math.Sin(hr);
+
+        double l_ = okL + 0.3963377774 * okA + 0.2158037573 * okB;
+        double m_ = okL - 0.1055613458 * okA - 0.0638541728 * okB;
+        double s_ = okL - 0.0894841775 * okA - 1.2914855480 * okB;
+
+        double l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+
+        return (
+            +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+            -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+            -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s);
+    }
 
     // RGB 轉 HLS（h: 0~360, l/s: 0~1）
     public static (double H, double L, double S) RgbToHls(int r, int g, int b)

@@ -45,6 +45,23 @@
             </Setter>
         </Style>
 
+        <Style x:Key="FormLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#999999" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+        </Style>
+
+        <Style x:Key="DarkTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="#2D2D30" />
+            <Setter Property="Foreground" Value="#DDDDDD" />
+            <Setter Property="BorderBrush" Value="#3E3E42" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="3,2" />
+            <Setter Property="CaretBrush" Value="#DDDDDD" />
+        </Style>
+
         <Style
             x:Key="CloseButtonStyle"
             BasedOn="{StaticResource CaptionButtonStyle}"
@@ -363,45 +380,60 @@
 
                 <!--  近似色／漸層色色票（OkLCH），主色置中  -->
                 <StackPanel Grid.Row="3" Margin="0,2,0,8">
-                    <StackPanel Orientation="Horizontal">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal">
+                            <Border
+                                x:Name="SimilarTab"
+                                Padding="14,5"
+                                Background="#1A1A1A"
+                                CornerRadius="6,6,0,0"
+                                Cursor="Hand"
+                                MouseLeftButtonDown="SwatchTab_Click">
+                                <TextBlock
+                                    x:Name="SimilarTabText"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    Foreground="#4EC9B0"
+                                    Text="近似色" />
+                            </Border>
+                            <Border
+                                x:Name="GradientTab"
+                                Padding="14,5"
+                                Background="Transparent"
+                                CornerRadius="6,6,0,0"
+                                Cursor="Hand"
+                                MouseLeftButtonDown="SwatchTab_Click">
+                                <TextBlock
+                                    x:Name="GradientTabText"
+                                    FontSize="12"
+                                    FontWeight="Bold"
+                                    Foreground="#777777"
+                                    Text="漸層色" />
+                            </Border>
+                        </StackPanel>
                         <Border
-                            x:Name="SimilarTab"
-                            Padding="14,5"
-                            Background="#1A1A1A"
-                            CornerRadius="6,6,0,0"
+                            x:Name="SwatchApplyButton"
+                            Width="20"
+                            Height="20"
+                            Margin="0,0,2,3"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Background="Black"
+                            BorderBrush="#555555"
+                            BorderThickness="1"
+                            CornerRadius="4"
                             Cursor="Hand"
-                            MouseLeftButtonDown="SwatchTab_Click">
-                            <TextBlock
-                                x:Name="SimilarTabText"
-                                FontSize="12"
-                                FontWeight="Bold"
-                                Foreground="#4EC9B0"
-                                Text="近似色" />
-                        </Border>
-                        <Border
-                            x:Name="GradientTab"
-                            Padding="14,5"
-                            Background="Transparent"
-                            CornerRadius="6,6,0,0"
-                            Cursor="Hand"
-                            MouseLeftButtonDown="SwatchTab_Click">
-                            <TextBlock
-                                x:Name="GradientTabText"
-                                FontSize="12"
-                                FontWeight="Bold"
-                                Foreground="#777777"
-                                Text="漸層色" />
-                        </Border>
-                    </StackPanel>
-                    <Border
-                        Padding="6"
-                        Background="#1A1A1A"
-                        CornerRadius="0,6,6,6">
+                            MouseLeftButtonDown="SwatchApply_Click"
+                            ToolTip="以目前顏色重新產生色票" />
+                    </Grid>
+                    <Border Background="#1A1A1A" CornerRadius="0,6,6,6">
                         <UniformGrid
                             x:Name="SwatchGrid"
-                            Height="110"
                             Columns="7"
-                            Rows="5" />
+                            Rows="5"
+                            SizeChanged="SwatchGrid_SizeChanged"
+                            SnapsToDevicePixels="True"
+                            UseLayoutRounding="True" />
                     </Border>
                 </StackPanel>
 
@@ -485,6 +517,23 @@
                         Text="圖片分析" />
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                         <CheckBox
+                            x:Name="GrayscaleCheck"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            Checked="PreviewMode_Changed"
+                            Content="灰階"
+                            Foreground="#999999"
+                            Unchecked="PreviewMode_Changed" />
+                        <CheckBox
+                            x:Name="PosterizeCheck"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            Checked="PreviewMode_Changed"
+                            Content="四階化"
+                            Foreground="#999999"
+                            ToolTip="以 OkLab 明度四等級把圖片降為四個純灰階色塊（海報化）"
+                            Unchecked="PreviewMode_Changed" />
+                        <CheckBox
                             x:Name="IgnoreBgCheck"
                             Margin="0,0,12,0"
                             VerticalAlignment="Center"
@@ -548,34 +597,71 @@
                 <UniformGrid
                     Grid.Row="4"
                     Margin="0,8,0,0"
-                    Columns="2">
+                    Columns="4">
                     <StackPanel HorizontalAlignment="Center">
-                        <Viewbox MaxHeight="120" Stretch="Uniform">
+                        <Viewbox MaxHeight="104" Stretch="Uniform">
                             <Canvas
                                 x:Name="HuePieCanvas"
                                 Width="110"
-                                Height="110" />
+                                Height="110"
+                                Background="Transparent"
+                                Cursor="Hand"
+                                ToolTip="點擊切換：圖中平均色 ↔ 各色相的明亮色調代表色" />
                         </Viewbox>
                         <TextBlock
                             Margin="0,4,0,0"
                             HorizontalAlignment="Center"
-                            FontSize="12"
+                            FontSize="11"
                             Foreground="#999999"
                             Text="色相平衡" />
                     </StackPanel>
                     <StackPanel HorizontalAlignment="Center">
-                        <Viewbox MaxHeight="120" Stretch="Uniform">
+                        <Viewbox MaxHeight="104" Stretch="Uniform">
                             <Canvas
-                                x:Name="TonePieCanvas"
+                                x:Name="ToneGroupPieCanvas"
+                                Width="110"
+                                Height="110"
+                                Background="Transparent"
+                                Cursor="Hand"
+                                ToolTip="點擊切換：圖中平均色 ↔ 以藍色相（216°）呈現各色調群" />
+                        </Viewbox>
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="11"
+                            Foreground="#999999"
+                            Text="色調（有彩）" />
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center">
+                        <Viewbox MaxHeight="104" Stretch="Uniform">
+                            <Canvas
+                                x:Name="ToneGroupNPieCanvas"
+                                Width="110"
+                                Height="110"
+                                Background="Transparent"
+                                Cursor="Hand"
+                                ToolTip="點擊切換：圖中平均色 ↔ 以藍色相（216°）呈現各色調群" />
+                        </Viewbox>
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            HorizontalAlignment="Center"
+                            FontSize="11"
+                            Foreground="#999999"
+                            Text="色調（含無彩）" />
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center">
+                        <Viewbox MaxHeight="104" Stretch="Uniform">
+                            <Canvas
+                                x:Name="LightPieCanvas"
                                 Width="110"
                                 Height="110" />
                         </Viewbox>
                         <TextBlock
                             Margin="0,4,0,0"
                             HorizontalAlignment="Center"
-                            FontSize="12"
+                            FontSize="11"
                             Foreground="#999999"
-                            Text="色調平衡" />
+                            Text="明度平衡" />
                     </StackPanel>
                 </UniformGrid>
             </Grid>
@@ -593,33 +679,409 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock
-                        Margin="0,0,0,10"
-                        FontWeight="Bold"
-                        Foreground="#AAAAAA"
-                        Text="PCCS 色調地圖" />
+                    <StackPanel Orientation="Horizontal">
+                        <Border
+                            x:Name="MapTab"
+                            Padding="14,5"
+                            Background="#1A1A1A"
+                            CornerRadius="6,6,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="RightTab_Click">
+                            <TextBlock
+                                x:Name="MapTabText"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="#4EC9B0"
+                                Text="色調地圖" />
+                        </Border>
+                        <Border
+                            x:Name="PaletteTab"
+                            Padding="14,5"
+                            Background="Transparent"
+                            CornerRadius="6,6,0,0"
+                            Cursor="Hand"
+                            MouseLeftButtonDown="RightTab_Click">
+                            <TextBlock
+                                x:Name="PaletteTabText"
+                                FontSize="12"
+                                FontWeight="Bold"
+                                Foreground="#777777"
+                                Text="調色盤引擎" />
+                        </Border>
+                    </StackPanel>
 
-                    <Viewbox
-                        Grid.Row="1"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Top"
-                        Stretch="Uniform">
-                        <StackPanel Orientation="Horizontal">
-                            <Grid
-                                x:Name="AchromaticBarGrid"
-                                Width="40"
-                                Height="312"
-                                Margin="0,24,10,24" />
-                            <Grid Width="370" Height="360">
-                                <Canvas
-                                    x:Name="PccsMapCanvas"
-                                    Background="Transparent"
-                                    Cursor="Cross"
-                                    MouseLeftButtonDown="PccsMapCanvas_Mouse" />
-                                <Canvas x:Name="PccsLabelCanvas" IsHitTestVisible="False" />
-                            </Grid>
-                        </StackPanel>
-                    </Viewbox>
+                    <Grid Grid.Row="1">
+                        <!--  分頁一：PCCS 色調地圖＋配色方案（維持不變）  -->
+                        <Grid x:Name="MapTabContent" Margin="0,10,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Viewbox
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Top"
+                                Stretch="Uniform">
+                                <StackPanel Orientation="Horizontal">
+                                    <Grid
+                                        x:Name="AchromaticBarGrid"
+                                        Width="40"
+                                        Height="312"
+                                        Margin="0,24,10,24" />
+                                    <Grid Width="370" Height="360">
+                                        <Canvas
+                                            x:Name="PccsMapCanvas"
+                                            Background="Transparent"
+                                            Cursor="Cross"
+                                            MouseLeftButtonDown="PccsMapCanvas_Mouse" />
+                                        <Canvas x:Name="PccsDotCanvas" IsHitTestVisible="False" />
+                                        <Canvas x:Name="PccsLabelCanvas" IsHitTestVisible="False" />
+                                    </Grid>
+                                </StackPanel>
+                            </Viewbox>
+
+                            <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                                <TextBlock
+                                    Margin="0,0,0,6"
+                                    FontWeight="Bold"
+                                    Foreground="#AAAAAA"
+                                    Text="PCCS 配色方案（點擊套用）" />
+                                <StackPanel x:Name="SchemePanel" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!--  分頁二：Palette Generation Engine  -->
+                        <ScrollViewer
+                            x:Name="PaletteTabContent"
+                            Margin="0,10,0,0"
+                            VerticalScrollBarVisibility="Auto"
+                            Visibility="Collapsed">
+                            <StackPanel Margin="0,0,6,0">
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="Preset" />
+                                    <ComboBox
+                                        x:Name="PresetCombo"
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        SelectionChanged="PresetCombo_Changed" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="色相數" />
+                                    <TextBox
+                                        x:Name="HueCountBox"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="12" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="8,0,6,0"
+                                        Style="{StaticResource FormLabel}"
+                                        Text="偏移°" />
+                                    <TextBox
+                                        x:Name="HueOffsetBox"
+                                        Grid.Column="3"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="0" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="方向" />
+                                    <ComboBox
+                                        x:Name="HueDirCombo"
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="順時針" />
+                                        <ComboBoxItem Content="逆時針" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="明度模式" />
+                                    <ComboBox
+                                        x:Name="LightModeCombo"
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        SelectedIndex="1">
+                                        <ComboBoxItem Content="手動停駐點" />
+                                        <ComboBoxItem Content="線性等分" />
+                                        <ComboBoxItem Content="曲線分布" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="明度停駐" ToolTip="手動模式使用，逗號分隔（0~100）" />
+                                    <TextBox
+                                        x:Name="LightStopsBox"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="95,80,65,50,35,20" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="30" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="36" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="起 / 迄 / 階" ToolTip="線性與曲線模式使用" />
+                                    <TextBox
+                                        x:Name="LightStartBox"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="95" />
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="6,0"
+                                        Style="{StaticResource FormLabel}"
+                                        Text="迄" />
+                                    <TextBox
+                                        x:Name="LightEndBox"
+                                        Grid.Column="3"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="20" />
+                                    <TextBlock
+                                        Grid.Column="4"
+                                        Margin="6,0"
+                                        Style="{StaticResource FormLabel}"
+                                        Text="階數" />
+                                    <TextBox
+                                        x:Name="LightStepsBox"
+                                        Grid.Column="5"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="6" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="24" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="曲線" />
+                                    <ComboBox
+                                        x:Name="CurveCombo"
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="Linear" />
+                                        <ComboBoxItem Content="Gamma" />
+                                        <ComboBoxItem Content="Log" />
+                                        <ComboBoxItem Content="Bezier" />
+                                    </ComboBox>
+                                    <TextBlock
+                                        Grid.Column="2"
+                                        Margin="6,0"
+                                        Style="{StaticResource FormLabel}"
+                                        Text="γ" />
+                                    <TextBox
+                                        x:Name="GammaBox"
+                                        Grid.Column="3"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="2.0" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="彩度模式" />
+                                    <ComboBox
+                                        x:Name="ChromaModeCombo"
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        SelectedIndex="1">
+                                        <ComboBoxItem Content="絕對值（所有色相共用）" />
+                                        <ComboBoxItem Content="相對 Cmax 比例（預設）" />
+                                        <ComboBoxItem Content="自適應（依色相修正）" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="彩度停駐" ToolTip="相對/自適應：百分比（90,60,30）；絕對：C 值（0.05,0.1）" />
+                                    <TextBox
+                                        x:Name="ChromaStopsBox"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="90,60,30" />
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="色域" />
+                                    <ComboBox
+                                        x:Name="GamutCombo"
+                                        Grid.Column="1"
+                                        Margin="0,0,4,0"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="sRGB" />
+                                        <ComboBoxItem Content="Display-P3" />
+                                        <ComboBoxItem Content="Rec2020" />
+                                        <ComboBoxItem Content="Unlimited" />
+                                    </ComboBox>
+                                    <ComboBox
+                                        x:Name="OogCombo"
+                                        Grid.Column="2"
+                                        FontSize="11"
+                                        SelectedIndex="1"
+                                        ToolTip="超出色域時的處理策略">
+                                        <ComboBoxItem Content="Clip 裁切" />
+                                        <ComboBoxItem Content="Scale 縮放" />
+                                        <ComboBoxItem Content="Compress 壓縮" />
+                                        <ComboBoxItem Content="Perceptual 感知" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="排序 / 命名" />
+                                    <ComboBox
+                                        x:Name="SortCombo"
+                                        Grid.Column="1"
+                                        Margin="0,0,4,0"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="色相優先" />
+                                        <ComboBoxItem Content="明度優先" />
+                                        <ComboBoxItem Content="彩度優先" />
+                                    </ComboBox>
+                                    <ComboBox
+                                        x:Name="NamingCombo"
+                                        Grid.Column="2"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="H-L-C 編碼" />
+                                        <ComboBoxItem Content="色相名（Red-03）" />
+                                        <ComboBoxItem Content="PCCS Style" />
+                                        <ComboBoxItem Content="自訂模板" />
+                                    </ComboBox>
+                                </Grid>
+
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="66" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Style="{StaticResource FormLabel}" Text="模板" ToolTip="{}{H} 色相、{L} 明度%、{C} 彩度×1000、{I} 索引、{HEX} 色碼" />
+                                    <TextBox
+                                        x:Name="NameTemplateBox"
+                                        Grid.Column="1"
+                                        Style="{StaticResource DarkTextBox}"
+                                        Text="H{H}-L{L}-C{C}" />
+                                    <CheckBox
+                                        x:Name="NeutralCheck"
+                                        Grid.Column="2"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Content="中性色"
+                                        Foreground="#999999"
+                                        IsChecked="True" />
+                                </Grid>
+
+                                <Grid Margin="0,4,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="90" />
+                                        <ColumnDefinition Width="70" />
+                                    </Grid.ColumnDefinitions>
+                                    <Button
+                                        x:Name="GenerateButton"
+                                        Height="28"
+                                        Margin="0,0,6,0"
+                                        Background="#2D2D30"
+                                        BorderBrush="#3E3E42"
+                                        BorderThickness="1"
+                                        Click="GeneratePalette_Click"
+                                        Content="產生調色盤"
+                                        Cursor="Hand"
+                                        FontWeight="Bold"
+                                        Foreground="#4EC9B0" />
+                                    <ComboBox
+                                        x:Name="ExportFormatCombo"
+                                        Grid.Column="1"
+                                        Margin="0,0,4,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        SelectedIndex="0">
+                                        <ComboBoxItem Content="JSON" />
+                                        <ComboBoxItem Content="CSS" />
+                                        <ComboBoxItem Content="HTML" />
+                                        <ComboBoxItem Content="SVG" />
+                                        <ComboBoxItem Content="ASE" />
+                                        <ComboBoxItem Content="PNG" />
+                                    </ComboBox>
+                                    <Button
+                                        x:Name="ExportButton"
+                                        Grid.Column="2"
+                                        Height="28"
+                                        Background="#2D2D30"
+                                        BorderBrush="#3E3E42"
+                                        BorderThickness="1"
+                                        Click="ExportPalette_Click"
+                                        Content="匯出…"
+                                        Cursor="Hand"
+                                        Foreground="#CCCCCC" />
+                                </Grid>
+
+                                <TextBlock
+                                    x:Name="PaletteInfoText"
+                                    Margin="0,0,0,6"
+                                    FontSize="11"
+                                    Foreground="#777777"
+                                    Text="按「產生調色盤」以目前設定生成" />
+
+                                <Border
+                                    Padding="4"
+                                    Background="#1A1A1A"
+                                    CornerRadius="6">
+                                    <WrapPanel x:Name="PalettePreviewPanel" />
+                                </Border>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

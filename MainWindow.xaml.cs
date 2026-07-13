@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -30,16 +31,41 @@ public partial class MainWindow : Window
     private readonly SolidColorBrush[] regionBrushes = new SolidColorBrush[17];
 
     private readonly Border[] achCells = new Border[5];
-    private readonly Border[,] hueToneCells = new Border[17, 12];
+    private readonly Border[,] hueToneCells = new Border[17, 24];
     private readonly Border[] achLevelCells = new Border[11];
+    private Grid? achInnerGrid;
     private static readonly Color CellOffColor = Color.FromRgb(0x1E, 0x1E, 0x1E);
 
+    // 10 色相環（每 36° 一格）與色調四大分類的顯示名稱
+    private static readonly string[] Hue10Codes = { "R", "YR", "Y", "GY", "G", "BG", "B", "PB", "P", "RP" };
+    private static readonly string[] Hue10Names = { "紅", "紅黃", "黃", "綠黃", "綠", "藍綠", "藍", "紫藍", "紫", "紅紫" };
+    private static readonly string[] GroupNames = { "鮮豔", "明亮", "昏暗", "暗淡" };
+    private static readonly string[] LightBandNames = { "0~0.25", "0.26~0.5", "0.51~0.75", "0.76~1" };
+
+    // 甜甜圈的顯示模式切換（點擊圖面切換）與最後一次分析結果
+    private ImageAnalysisResult? lastAnalysis;
+    private bool huePieRepMode;    // 色相平衡：false=圖中平均色、true=各色相的明亮色調（B）代表色
+    private bool tonePieBlueMode;  // 色調（有彩）：true=以 10 色相環的藍（216°）呈現各色調群
+    private bool tonePieNBlueMode; // 色調（含無彩）：同上
+
+    // PCCS 配色方案（5 列 × 5 色票）
+    private readonly Border[,] schemeCells = new Border[5, 5];
+    private readonly SolidColorBrush[,] schemeBrushes = new SolidColorBrush[5, 5];
+    private static readonly string[] SchemeNames = { "同色調", "同色相", "卡瑪伊尤", "對決色調", "五色相" };
+
     // 近似色／漸層色色票（7x5，主色置中）
+    // 色票不隨滑桿即時更新：按標頭右側的顏色方塊才以目前顏色重新產生（swatchBaseRgb）
     private readonly Border[,] swatchCells = new Border[5, 7];
     private readonly SolidColorBrush[,] swatchBrushes = new SolidColorBrush[5, 7];
     private bool similarTabActive = true;
     private (int R, int G, int B) currentRgb = (0, 0, 0);
+    private (int R, int G, int B) swatchBaseRgb = (0, 0, 0);
+    private int swatchMarkerRow = 2, swatchMarkerCol = 3;
+    private readonly SolidColorBrush swatchApplyBrush = new(Colors.Black);
     private string? lastImagePath;
+
+    // 圖片預覽的三種模式：原圖／灰階／四階化（灰階與海報化影像延遲產生並快取）
+    private BitmapSource? previewOriginal, previewGray, previewPoster;
 
     public MainWindow()
     {
@@ -56,8 +82,21 @@ public partial class MainWindow : Window
         CreatePccsLabels();
         CreateHueToneGrid();
         CreateSwatchGrid();
+        CreateSchemePanel();
         DrawHueRing(); // 啟動時繪製外環
         UpdateUI();
+        SwatchApplyButton.Background = swatchApplyBrush;
+        RefreshSwatchBase(); // 啟動時以初始顏色填滿色票
+
+        // 點擊甜甜圈切換顯示模式
+        HuePieCanvas.MouseLeftButtonDown += (_, _) => { huePieRepMode = !huePieRepMode; UpdatePies(); };
+        ToneGroupPieCanvas.MouseLeftButtonDown += (_, _) => { tonePieBlueMode = !tonePieBlueMode; UpdatePies(); };
+        ToneGroupNPieCanvas.MouseLeftButtonDown += (_, _) => { tonePieNBlueMode = !tonePieNBlueMode; UpdatePies(); };
+
+        // 調色盤引擎的 Preset 清單
+        foreach ((string name, _) in PaletteEngine.Presets)
+            PresetCombo.Items.Add(new ComboBoxItem { Content = name, FontSize = 11 });
+        PresetCombo.SelectedIndex = 0;
     }
 
     // 按鈕切換事件
@@ -307,7 +346,7 @@ public partial class MainWindow : Window
             var brush = new SolidColorBrush(Colors.Gray);
             var path = new System.Windows.Shapes.Path
             {
-                Data = BuildRoundedPolygon(pts, 9),
+                Data = BuildRoundedPolygon(pts, 3),
                 Fill = brush,
                 StrokeThickness = 2.5,
                 StrokeLineJoin = PenLineJoin.Round,
@@ -449,34 +488,62 @@ public partial class MainWindow : Window
     private void CreateHueToneGrid()
     {
         var g = HueToneGrid;
-        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
-        for (int c = 0; c < 12; c++)
+        // 欄配置：色調標籤 26 ＋ 24 個色相欄（星號）＋ 間隔 12 ＋ 明度標籤 22 ＋ 無彩色階欄（與色相欄同寬）
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
+        for (int c = 0; c < 24; c++)
             g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(12) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
+        g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        // 第 0 列：12 個色相的顏色標記
-        g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(12) });
-        for (int c = 0; c < 12; c++)
+        // 第 0 列：雙層標頭——hue 數字（與色調標籤同色）在上、該色相的色線在下
+        g.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        for (int c = 0; c < 24; c++)
         {
-            (int r, int gg, int b) = ColorMath.HlsToRgb(c * 30, 0.5, 1.0);
-            var marker = new Border
+            (int r, int gg, int b) = ColorMath.HlsToRgb(c * 15, 0.5, 1.0);
+            var header = new StackPanel
             {
-                Height = 5,
-                Margin = new Thickness(1.5, 0, 1.5, 3),
-                CornerRadius = new CornerRadius(2),
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Background = new SolidColorBrush(Color.FromRgb((byte)r, (byte)gg, (byte)b)),
-                Opacity = 0.9,
-                ToolTip = $"{c * 30}°"
+                ToolTip = $"{c * 15}°"
             };
-            Grid.SetRow(marker, 0);
-            Grid.SetColumn(marker, c + 1);
-            g.Children.Add(marker);
+            header.Children.Add(new TextBlock
+            {
+                Text = (c * 15).ToString(),
+                FontSize = 8,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 1)
+            });
+            header.Children.Add(new Border
+            {
+                Height = 4,
+                Margin = new Thickness(0.75, 0, 0.75, 2),
+                CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(Color.FromRgb((byte)r, (byte)gg, (byte)b)),
+                Opacity = 0.9
+            });
+            Grid.SetRow(header, 0);
+            Grid.SetColumn(header, c + 1);
+            g.Children.Add(header);
         }
+        var achHeader = new TextBlock
+        {
+            Text = "無彩",
+            FontSize = 9,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 2)
+        };
+        Grid.SetRow(achHeader, 0);
+        Grid.SetColumn(achHeader, 25);
+        Grid.SetColumnSpan(achHeader, 3);
+        g.Children.Add(achHeader);
 
-        // 12 個有彩色調列
+        // 12 個有彩色調列（列高由 SizeChanged 依欄寬回設，維持正方形）
         for (int ri = 0; ri < Pccs.ChromaticDisplayOrder.Length; ri++)
         {
-            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(16) });
+            g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(14) });
             var tone = Pccs.Tones[Pccs.ChromaticDisplayOrder[ri]];
 
             var rowLabel = new TextBlock
@@ -493,12 +560,11 @@ public partial class MainWindow : Window
             Grid.SetColumn(rowLabel, 0);
             g.Children.Add(rowLabel);
 
-            for (int c = 0; c < 12; c++)
+            for (int c = 0; c < 24; c++)
             {
                 var cell = new Border
                 {
-                    Margin = new Thickness(1.5),
-                    CornerRadius = new CornerRadius(2),
+                    Margin = new Thickness(0.75),
                     Background = new SolidColorBrush(CellOffColor)
                 };
                 cell.MouseLeftButtonDown += HueToneCell_Click;
@@ -509,40 +575,60 @@ public partial class MainWindow : Window
             }
         }
 
-        // 最後一列：5 個無彩色調
-        g.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });
-        var achLabel = new TextBlock
+        // 無彩 11 色階：直欄（上白下黑），左側標記明度 0~100
+        achInnerGrid = new Grid { VerticalAlignment = VerticalAlignment.Top };
+        achInnerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
+        achInnerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (int row = 0; row < 11; row++)
         {
-            Text = "無彩",
-            FontSize = 10,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 5, 0)
-        };
-        Grid.SetRow(achLabel, 13);
-        Grid.SetColumn(achLabel, 0);
-        g.Children.Add(achLabel);
+            achInnerGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(14) });
+            int level = 10 - row; // 上白（100）下黑（0）
 
-        // 無彩列：明度 0~100 分十階、含兩端共 11 級（左黑右白）
-        var achRow = new UniformGrid { Rows = 1, Columns = 11 };
-        Grid.SetRow(achRow, 13);
-        Grid.SetColumn(achRow, 1);
-        Grid.SetColumnSpan(achRow, 12);
-        for (int i = 0; i < 11; i++)
-        {
+            var lvlLabel = new TextBlock
+            {
+                Text = (level * 10).ToString(),
+                FontSize = 8,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0)
+            };
+            Grid.SetRow(lvlLabel, row);
+            Grid.SetColumn(lvlLabel, 0);
+            achInnerGrid.Children.Add(lvlLabel);
+
             var cell = new Border
             {
-                Margin = new Thickness(1.5),
-                CornerRadius = new CornerRadius(2),
+                Margin = new Thickness(0.75),
                 Background = new SolidColorBrush(CellOffColor),
-                ToolTip = $"無彩 L≈{i * 10}%"
+                ToolTip = $"無彩 L≈{level * 10}%"
             };
             cell.MouseLeftButtonDown += HueToneCell_Click;
-            achRow.Children.Add(cell);
-            achLevelCells[i] = cell;
+            Grid.SetRow(cell, row);
+            Grid.SetColumn(cell, 1);
+            achInnerGrid.Children.Add(cell);
+            achLevelCells[level] = cell;
         }
-        g.Children.Add(achRow);
+        Grid.SetRow(achInnerGrid, 1);
+        Grid.SetRowSpan(achInnerGrid, 12);
+        Grid.SetColumn(achInnerGrid, 26);
+        Grid.SetColumnSpan(achInnerGrid, 2);
+        g.Children.Add(achInnerGrid);
+
+        g.SizeChanged += HueToneGrid_SizeChanged;
+    }
+
+    // 依目前的星號欄寬把列高設成等值，讓方格維持正方形
+    private void HueToneGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double star = (HueToneGrid.ActualWidth - 26 - 12 - 22) / 25.0;
+        if (double.IsNaN(star) || star < 4) return;
+
+        for (int r = 1; r <= 12 && r < HueToneGrid.RowDefinitions.Count; r++)
+            HueToneGrid.RowDefinitions[r].Height = new GridLength(star);
+        if (achInnerGrid != null)
+            foreach (var rd in achInnerGrid.RowDefinitions)
+                rd.Height = new GridLength(star);
     }
 
     // 點擊 Hue & Tone 網格中有顏色的格子 → 把該格的平均色反映到色相環與滑桿
@@ -556,20 +642,19 @@ public partial class MainWindow : Window
     // ==========================================
     private void CreateSwatchGrid()
     {
+        // 色塊之間無間隙；外圓角由 SwatchGrid_SizeChanged 以 Clip 統一裁切
         for (int row = 0; row < 5; row++)
         {
             for (int col = 0; col < 7; col++)
             {
                 var brush = new SolidColorBrush(Colors.Black);
-                bool isCenter = row == 2 && col == 3; // 中心格＝目前主色
                 var cell = new Border
                 {
-                    Margin = new Thickness(1.5),
-                    CornerRadius = new CornerRadius(3),
                     Background = brush,
                     Cursor = Cursors.Hand,
-                    BorderThickness = new Thickness(isCenter ? 1.5 : 0),
-                    BorderBrush = isCenter ? Brushes.White : null
+                    BorderBrush = Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Tag = row * 7 + col
                 };
                 cell.MouseLeftButtonDown += SwatchCell_Click;
                 SwatchGrid.Children.Add(cell);
@@ -579,13 +664,303 @@ public partial class MainWindow : Window
         }
     }
 
+    // 白框標記移到指定格
+    private void SetSwatchMarker(int row, int col)
+    {
+        swatchCells[swatchMarkerRow, swatchMarkerCol].BorderThickness = new Thickness(0);
+        swatchMarkerRow = row;
+        swatchMarkerCol = col;
+        swatchCells[row, col].BorderThickness = new Thickness(1.5);
+    }
+
+    // 以目前顏色為新基準重建色票，標記置回中心
+    private void RefreshSwatchBase()
+    {
+        swatchBaseRgb = currentRgb;
+        UpdateSwatchGrid(swatchBaseRgb.R, swatchBaseRgb.G, swatchBaseRgb.B);
+        SetSwatchMarker(2, 3);
+    }
+
+    private void SwatchApply_Click(object sender, MouseButtonEventArgs e) => RefreshSwatchBase();
+
+    // ==========================================
+    // 右欄分頁：色調地圖 ↔ 調色盤引擎
+    // ==========================================
+    private Palette? lastPalette;
+
+    private void RightTab_Click(object sender, MouseButtonEventArgs e)
+    {
+        bool mapActive = ReferenceEquals(sender, MapTab);
+
+        var panelBg = new SolidColorBrush(Color.FromRgb(0x1A, 0x1A, 0x1A));
+        var active = new SolidColorBrush(Color.FromRgb(0x4E, 0xC9, 0xB0));
+        var inactive = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77));
+
+        MapTab.Background = mapActive ? panelBg : Brushes.Transparent;
+        PaletteTab.Background = mapActive ? Brushes.Transparent : panelBg;
+        MapTabText.Foreground = mapActive ? active : inactive;
+        PaletteTabText.Foreground = mapActive ? inactive : active;
+        MapTabContent.Visibility = mapActive ? Visibility.Visible : Visibility.Collapsed;
+        PaletteTabContent.Visibility = mapActive ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void PresetCombo_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (PalettePreviewPanel == null) return; // InitializeComponent 期間
+        int i = PresetCombo.SelectedIndex;
+        if (i < 0 || i >= PaletteEngine.Presets.Length) return;
+        FillPaletteForm(PaletteEngine.Presets[i].Create());
+    }
+
+    // Preset（一組設定）載入表單
+    private void FillPaletteForm(PaletteConfig c)
+    {
+        HueCountBox.Text = c.HueCount.ToString();
+        HueOffsetBox.Text = c.HueOffset.ToString(CultureInfo.InvariantCulture);
+        HueDirCombo.SelectedIndex = c.Direction == HueDirection.Clockwise ? 0 : 1;
+        LightModeCombo.SelectedIndex = (int)c.LightnessMode;
+        LightStopsBox.Text = string.Join(",", c.LightnessStops.Select(v => v.ToString(CultureInfo.InvariantCulture)));
+        LightStartBox.Text = c.LightnessStart.ToString(CultureInfo.InvariantCulture);
+        LightEndBox.Text = c.LightnessEnd.ToString(CultureInfo.InvariantCulture);
+        LightStepsBox.Text = c.LightnessSteps.ToString();
+        CurveCombo.SelectedIndex = (int)c.Curve;
+        GammaBox.Text = c.Gamma.ToString(CultureInfo.InvariantCulture);
+        ChromaModeCombo.SelectedIndex = (int)c.ChromaMode;
+        ChromaStopsBox.Text = string.Join(",", c.ChromaStops.Select(v =>
+            c.ChromaMode == ChromaMode.Absolute
+                ? v.ToString(CultureInfo.InvariantCulture)
+                : Math.Round(v * 100).ToString(CultureInfo.InvariantCulture)));
+        NeutralCheck.IsChecked = c.IncludeNeutral;
+        GamutCombo.SelectedIndex = (int)c.Gamut;
+        OogCombo.SelectedIndex = (int)c.OutOfGamut;
+        SortCombo.SelectedIndex = (int)c.Sorting;
+        NamingCombo.SelectedIndex = (int)c.Naming;
+        NameTemplateBox.Text = c.NameTemplate;
+    }
+
+    // 表單組回 PaletteConfig（引擎只吃設定，不碰 UI）
+    private PaletteConfig BuildPaletteConfig()
+    {
+        static double[] ParseList(string s) =>
+            s.Split(new[] { ',', ' ', '、', ';' }, StringSplitOptions.RemoveEmptyEntries)
+             .Select(v => double.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+
+        var c = new PaletteConfig
+        {
+            PaletteName = "ColorTool Palette",
+            HueCount = Math.Clamp(int.Parse(HueCountBox.Text), 1, 360),
+            HueOffset = double.Parse(HueOffsetBox.Text, CultureInfo.InvariantCulture),
+            Direction = HueDirCombo.SelectedIndex == 1 ? HueDirection.CounterClockwise : HueDirection.Clockwise,
+            LightnessMode = (LightnessMode)Math.Max(0, LightModeCombo.SelectedIndex),
+            LightnessStart = double.Parse(LightStartBox.Text, CultureInfo.InvariantCulture),
+            LightnessEnd = double.Parse(LightEndBox.Text, CultureInfo.InvariantCulture),
+            LightnessSteps = Math.Clamp(int.Parse(LightStepsBox.Text), 2, 64),
+            Curve = (CurveType)Math.Max(0, CurveCombo.SelectedIndex),
+            Gamma = double.Parse(GammaBox.Text, CultureInfo.InvariantCulture),
+            ChromaMode = (ChromaMode)Math.Max(0, ChromaModeCombo.SelectedIndex),
+            IncludeNeutral = NeutralCheck.IsChecked == true,
+            Gamut = (TargetGamut)Math.Max(0, GamutCombo.SelectedIndex),
+            OutOfGamut = (GamutStrategy)Math.Max(0, OogCombo.SelectedIndex),
+            Sorting = (PaletteSorting)Math.Max(0, SortCombo.SelectedIndex),
+            Naming = (NamingStyle)Math.Max(0, NamingCombo.SelectedIndex),
+            NameTemplate = string.IsNullOrWhiteSpace(NameTemplateBox.Text) ? "H{H}-L{L}-C{C}" : NameTemplateBox.Text,
+        };
+
+        var lStops = ParseList(LightStopsBox.Text);
+        if (lStops.Length > 0) c.LightnessStops = lStops;
+
+        var cStops = ParseList(ChromaStopsBox.Text);
+        if (cStops.Length > 0)
+            c.ChromaStops = c.ChromaMode == ChromaMode.Absolute
+                ? cStops
+                : cStops.Select(v => v > 1 ? v / 100.0 : v).ToArray(); // 比例可用 90 或 0.9 表示
+        return c;
+    }
+
+    private void GeneratePalette_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            lastPalette = PaletteEngine.GeneratePalette(BuildPaletteConfig());
+            RenderPalettePreview(lastPalette);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"設定解析失敗：\n{ex.Message}", "調色盤引擎");
+        }
+    }
+
+    private void RenderPalettePreview(Palette pal)
+    {
+        const int maxPreview = 1500;
+        PalettePreviewPanel.Children.Clear();
+        int shown = 0;
+        foreach (var en in pal.Entries)
+        {
+            if (shown++ >= maxPreview) break;
+            var col = Color.FromRgb(en.R, en.G, en.B);
+            var cell = new Border
+            {
+                Width = 20,
+                Height = 20,
+                Margin = new Thickness(0.5),
+                Background = new SolidColorBrush(col),
+                Cursor = Cursors.Hand,
+                ToolTip = $"{en.Name}\n{en.Hex}\noklch({en.L:F2} {en.C:F3} {en.H:F0}°)"
+            };
+            cell.MouseLeftButtonDown += (_, _) => ApplyRgbColor(col);
+            PalettePreviewPanel.Children.Add(cell);
+        }
+        PaletteInfoText.Text = pal.Entries.Count > maxPreview
+            ? $"共 {pal.Entries.Count} 色（預覽顯示前 {maxPreview} 色，匯出為完整內容）"
+            : $"共 {pal.Entries.Count} 色（點色塊可套用到選色器）";
+    }
+
+    private void ExportPalette_Click(object sender, RoutedEventArgs e)
+    {
+        if (lastPalette == null)
+        {
+            GeneratePalette_Click(sender, e);
+            if (lastPalette == null) return;
+        }
+
+        string[] ext = { "json", "css", "html", "svg", "ase", "png" };
+        string fmt = ext[Math.Clamp(ExportFormatCombo.SelectedIndex, 0, ext.Length - 1)];
+        var dlg = new SaveFileDialog
+        {
+            Title = "匯出調色盤",
+            FileName = $"palette.{fmt}",
+            Filter = $"{fmt.ToUpperInvariant()} 檔|*.{fmt}|所有檔案|*.*"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            PaletteExporter.Save(lastPalette, dlg.FileName);
+            PaletteInfoText.Text = $"已匯出：{dlg.FileName}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"匯出失敗：\n{ex.Message}", "調色盤引擎");
+        }
+    }
+
+    // ==========================================
+    // PCCS 配色方案（色調地圖下方，5 種技法 × 5 色票）
+    // ==========================================
+    private void CreateSchemePanel()
+    {
+        string[] tips =
+        {
+            "同色調配色（tone in tone）：固定目前色調、鄰近色相 ±20°/±40°",
+            "同色相配色（tone on tone）：固定目前色相、Vp/B/V/Dp/Dk 明暗階梯",
+            "卡瑪伊尤（camaïeu）：以 OkLCH 做極近似的微差配色",
+            "對決色調：明清色調（目前色相）對上暗清色調（補色相）",
+            "五色相環（pentad）：固定目前色調、色相環五等分",
+        };
+        for (int row = 0; row < 5; row++)
+        {
+            var rowPanel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 5) };
+            rowPanel.Children.Add(new TextBlock
+            {
+                Text = SchemeNames[row],
+                FontSize = 11,
+                Width = 66,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x99, 0x99, 0x99)),
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = tips[row]
+            });
+            for (int i = 0; i < 5; i++)
+            {
+                var brush = new SolidColorBrush(Colors.Black);
+                var cell = new Border
+                {
+                    Width = 24,
+                    Height = 24,
+                    Margin = new Thickness(1.5, 0, 1.5, 0),
+                    CornerRadius = new CornerRadius(4),
+                    Background = brush,
+                    Cursor = Cursors.Hand
+                };
+                cell.MouseLeftButtonDown += SchemeCell_Click;
+                rowPanel.Children.Add(cell);
+                schemeCells[row, i] = cell;
+                schemeBrushes[row, i] = brush;
+            }
+            SchemePanel.Children.Add(rowPanel);
+        }
+    }
+
+    private void SchemeCell_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (((Border)sender).Background is SolidColorBrush b) ApplyRgbColor(b.Color);
+    }
+
+    private static double NormHue(double h) => ((h % 360) + 360) % 360;
+
+    private void SetScheme(int row, int i, (int R, int G, int B) rgb)
+    {
+        schemeBrushes[row, i].Color = Color.FromRgb((byte)rgb.R, (byte)rgb.G, (byte)rgb.B);
+        schemeCells[row, i].ToolTip = $"#{rgb.R:X2}{rgb.G:X2}{rgb.B:X2}";
+    }
+
+    // 依目前的色相與色調重算五種配色方案
+    private void UpdateSchemes(double h, PccsTone tone)
+    {
+        // 無彩色沒有色相概念，方案改以 V 色調當基準
+        (double tl, double ts) = tone.IsAchromatic ? Pccs.Tones[5].RepresentativeHls() : tone.RepresentativeHls();
+
+        // 1 同色調：固定色調、色相 ±20°/±40°
+        for (int i = 0; i < 5; i++)
+            SetScheme(0, i, ColorMath.HlsToRgb(NormHue(h + (i - 2) * 20), tl, ts));
+
+        // 2 同色相：Vp/B/V/Dp/Dk 明暗階梯
+        int[] ladder = { 13, 6, 5, 8, 12 };
+        for (int i = 0; i < 5; i++)
+        {
+            (double l2, double s2) = Pccs.Tones[ladder[i]].RepresentativeHls();
+            SetScheme(1, i, ColorMath.HlsToRgb(h, l2, s2));
+        }
+
+        // 3 卡瑪伊尤：OkLCH 微偏移（左亮右暗的斜向微差）
+        (double okL, double okC, double okH) = ColorMath.RgbToOklch(currentRgb.R, currentRgb.G, currentRgb.B);
+        for (int i = 0; i < 5; i++)
+        {
+            int d = i - 2;
+            SetScheme(2, i, ColorMath.OklchToRgb(Math.Clamp(okL - d * 0.045, 0.0, 1.0), okC, okH + d * 7));
+        }
+
+        // 4 對決色調：明清（P/B/V @ 目前色相）對 暗清（Dp/Dk @ 補色相）
+        int[] duelTones = { 9, 6, 5, 8, 12 };
+        for (int i = 0; i < 5; i++)
+        {
+            (double l2, double s2) = Pccs.Tones[duelTones[i]].RepresentativeHls();
+            double hh = i < 3 ? h : NormHue(h + 180);
+            SetScheme(3, i, ColorMath.HlsToRgb(hh, l2, s2));
+        }
+
+        // 5 五色相環：固定色調、72° 等分
+        for (int i = 0; i < 5; i++)
+            SetScheme(4, i, ColorMath.HlsToRgb(NormHue(h + i * 72), tl, ts));
+    }
+
+    // 色票維持正方形格（高＝寬×5/7），並以圓角矩形裁切整塊的四個角落
+    private void SwatchGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double w = SwatchGrid.ActualWidth;
+        if (double.IsNaN(w) || w <= 0) return;
+        double hgt = w * 5.0 / 7.0;
+        SwatchGrid.Height = hgt;
+        SwatchGrid.Clip = new RectangleGeometry(new Rect(0, 0, w, hgt), 6, 6);
+    }
+
     // 近似色：X 軸 OkLCH 色相 ±8°/格、Y 軸 L ±0.05/格（上亮下暗，輔助挑高光與陰影）
-    // 漸層色：X 軸 ±2°/格、Y 軸 L ±0.01/格（細微漸層）
+    // 漸層色：X 軸 ±4°/格、Y 軸 L ±0.03/格
     private void UpdateSwatchGrid(int r, int g, int b)
     {
         (double okL, double okC, double okH) = ColorMath.RgbToOklch(r, g, b);
-        double hueStep = similarTabActive ? 8.0 : 2.0;
-        double lStep = similarTabActive ? 0.05 : 0.01;
+        double hueStep = similarTabActive ? 8.0 : 4.0;
+        double lStep = similarTabActive ? 0.05 : 0.03;
 
         for (int row = 0; row < 5; row++)
         {
@@ -600,10 +975,12 @@ public partial class MainWindow : Window
         }
     }
 
+    // 點擊色票：白框移到該格並套用顏色（色票本身不重建，按顏色方塊按鈕才重建）
     private void SwatchCell_Click(object sender, MouseButtonEventArgs e)
     {
-        if (((Border)sender).Background is SolidColorBrush b)
-            ApplyRgbColor(b.Color);
+        var cell = (Border)sender;
+        if (cell.Tag is int idx) SetSwatchMarker(idx / 7, idx % 7);
+        if (cell.Background is SolidColorBrush b) ApplyRgbColor(b.Color);
     }
 
     private void SwatchTab_Click(object sender, MouseButtonEventArgs e)
@@ -619,7 +996,9 @@ public partial class MainWindow : Window
         SimilarTabText.Foreground = similarTabActive ? active : inactive;
         GradientTabText.Foreground = similarTabActive ? inactive : active;
 
-        UpdateSwatchGrid(currentRgb.R, currentRgb.G, currentRgb.B);
+        // 切換分頁時以「上次套用的基準色」重算，不追目前滑桿的顏色
+        UpdateSwatchGrid(swatchBaseRgb.R, swatchBaseRgb.G, swatchBaseRgb.B);
+        SetSwatchMarker(2, 3);
     }
 
     // ==========================================
@@ -807,7 +1186,8 @@ public partial class MainWindow : Window
         (int r, int g, int b) = ColorMath.HlsToRgb(h, hls_l, hls_s);
         var tone = Pccs.ClassifyRgb(r / 255.0, g / 255.0, b / 255.0);
         currentRgb = (r, g, b);
-        UpdateSwatchGrid(r, g, b);
+        swatchApplyBrush.Color = Color.FromRgb((byte)r, (byte)g, (byte)b); // 標頭的顏色方塊即時預覽
+        if (schemeCells[4, 4] != null) UpdateSchemes(h, tone);
 
         // 重新繪製中心形狀與 PCCS 地圖填色
         bool hueChanged = Math.Abs(lastDrawnHue - h) > 0.5;
@@ -894,7 +1274,10 @@ public partial class MainWindow : Window
             preview.CacheOption = BitmapCacheOption.OnLoad;
             preview.EndInit();
             preview.Freeze();
-            AnalyzedImagePreview.Source = preview;
+            previewOriginal = preview;
+            previewGray = null;
+            previewPoster = null;
+            UpdatePreviewImage();
             PreviewPlaceholder.Visibility = Visibility.Collapsed;
 
             var result = ImageAnalyzer.Analyze(dlg.FileName);
@@ -916,6 +1299,73 @@ public partial class MainWindow : Window
         catch { /* 檔案已被移動或刪除時維持原顯示 */ }
     }
 
+    // 切換灰階／四階化預覽（四階化優先，因為它本身就是灰階）
+    private void PreviewMode_Changed(object sender, RoutedEventArgs e) => UpdatePreviewImage();
+
+    private void UpdatePreviewImage()
+    {
+        if (previewOriginal == null) return;
+
+        if (PosterizeCheck.IsChecked == true)
+        {
+            previewPoster ??= MakeLightnessPreview(previewOriginal, posterize: true);
+            AnalyzedImagePreview.Source = previewPoster;
+        }
+        else if (GrayscaleCheck.IsChecked == true)
+        {
+            previewGray ??= MakeLightnessPreview(previewOriginal, posterize: false);
+            AnalyzedImagePreview.Source = previewGray;
+        }
+        else
+        {
+            AnalyzedImagePreview.Source = previewOriginal;
+        }
+    }
+
+    // 以 OkLab 明度產生灰階或四階化（海報化）影像：
+    // 灰階＝逐像素取等亮度灰；四階化＝L 依 0~0.25/~0.5/~0.75/~1 分四級，各級以區間中點的純灰渲染
+    private static BitmapSource MakeLightnessPreview(BitmapSource src, bool posterize)
+    {
+        var conv = new FormatConvertedBitmap(src, PixelFormats.Bgra32, null, 0);
+        int w = conv.PixelWidth, h = conv.PixelHeight;
+        int stride = w * 4;
+        byte[] px = new byte[h * stride];
+        conv.CopyPixels(px, stride, 0);
+
+        // sRGB → 線性查表，避免每像素三次 Math.Pow
+        var lut = new double[256];
+        for (int i = 0; i < 256; i++) lut[i] = ColorMath.SrgbToLinear(i / 255.0);
+
+        byte[] posterGray =
+        {
+            ColorMath.OklabLToGray(0.125),
+            ColorMath.OklabLToGray(0.375),
+            ColorMath.OklabLToGray(0.625),
+            ColorMath.OklabLToGray(0.875),
+        };
+
+        for (int i = 0; i < px.Length; i += 4)
+        {
+            double okL = ColorMath.OklabLFromLinear(lut[px[i + 2]], lut[px[i + 1]], lut[px[i]]);
+            byte gray;
+            if (posterize)
+            {
+                int band = okL <= 0.25 ? 0 : okL <= 0.5 ? 1 : okL <= 0.75 ? 2 : 3;
+                gray = posterGray[band];
+            }
+            else
+            {
+                gray = ColorMath.OklabLToGray(okL);
+            }
+            px[i] = gray; px[i + 1] = gray; px[i + 2] = gray;
+        }
+
+        var wb = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
+        wb.WritePixels(new Int32Rect(0, 0, w, h), px, stride, 0);
+        wb.Freeze();
+        return wb;
+    }
+
     private void UpdateAnalysisUI(ImageAnalysisResult res)
     {
         if (res.Total == 0) return;
@@ -924,14 +1374,14 @@ public partial class MainWindow : Window
         const double minShare = 0.002; // 佔比低於 0.2% 視為雜訊
         foreach (int idx in Pccs.ChromaticDisplayOrder)
         {
-            for (int c = 0; c < 12; c++)
+            for (int c = 0; c < 24; c++)
             {
                 var cell = hueToneCells[idx, c];
                 double share = res.CellCount[idx, c] / (double)res.Total;
                 if (share >= minShare)
                 {
                     cell.Background = new SolidColorBrush(res.CellAvg[idx, c]);
-                    cell.ToolTip = $"{Pccs.Tones[idx].Code} × {c * 30}°：{share:P1}，點擊套用";
+                    cell.ToolTip = $"{Pccs.Tones[idx].Code} × {c * 15}°：{share:P1}，點擊套用";
                     cell.Tag = res.CellAvg[idx, c];
                     cell.Cursor = Cursors.Hand;
                 }
@@ -964,28 +1414,30 @@ public partial class MainWindow : Window
             }
         }
 
-        // 色相平衡圓餅圖（無彩色像素獨立成一塊）
-        var hueItems = new List<(double Frac, Color Color, string Tip)>();
-        for (int c = 0; c < 12; c++)
-        {
-            double frac = res.HueCount[c] / (double)res.Total;
-            if (frac > 0) hueItems.Add((frac, res.HueAvg[c], $"{c * 30}° 附近：{frac:P1}"));
-        }
-        if (res.AchromaticCount > 0)
-        {
-            double frac = res.AchromaticCount / (double)res.Total;
-            hueItems.Add((frac, res.AchromaticAvg, $"無彩色：{frac:P1}"));
-        }
-        DrawPie(HuePieCanvas, hueItems);
+        lastAnalysis = res;
+        UpdatePies();
 
-        // 色調平衡圓餅圖
-        var toneItems = new List<(double Frac, Color Color, string Tip)>();
+        // 色調分佈投影到色調地圖：每個色調在代表點畫一顆點，面積≈佔比、顏色＝該色調的平均色
+        PccsDotCanvas.Children.Clear();
         foreach (var t in Pccs.Tones)
         {
-            double frac = res.ToneCount[t.Index] / (double)res.Total;
-            if (frac > 0) toneItems.Add((frac, res.ToneAvg[t.Index], $"{t.Code} {t.Name}：{frac:P1}"));
+            double share = res.ToneCount[t.Index] / (double)res.Total;
+            if (share < 0.002) continue;
+            Point pos = CRlToPoint(Math.Max(t.RepC, 0.035), t.RepRl);
+            double rad = 3.5 + Math.Sqrt(share) * 24;
+            var dot = new Ellipse
+            {
+                Width = rad * 2,
+                Height = rad * 2,
+                Fill = new SolidColorBrush(res.ToneAvg[t.Index]),
+                Stroke = Brushes.White,
+                StrokeThickness = 1,
+                Opacity = 0.92
+            };
+            Canvas.SetLeft(dot, pos.X - rad);
+            Canvas.SetTop(dot, pos.Y - rad);
+            PccsDotCanvas.Children.Add(dot);
         }
-        DrawPie(TonePieCanvas, toneItems);
 
         // 配色角色：主色／次要色／輔助色／點綴色
         DominantColorsPanel.Children.Clear();
@@ -1035,6 +1487,91 @@ public partial class MainWindow : Window
                 HorizontalAlignment = HorizontalAlignment.Center
             });
             DominantColorsPanel.Children.Add(stack);
+        }
+    }
+
+    // 四張甜甜圈；分母用 PieTotal（「忽略背景」開啟時已排除背景像素——實驗性）
+    private void UpdatePies()
+    {
+        if (lastAnalysis == null || lastAnalysis.PieTotal == 0) return;
+        var res = lastAnalysis;
+        double total = res.PieTotal;
+
+        // 色相平衡：10 色相環＋無彩 N。切換模式＝各色相的明亮色調（B）代表色
+        (double bL, double bS) = Pccs.Tones[6].RepresentativeHls();
+        var hueItems = new List<(double Frac, Color Color, string Tip)>();
+        for (int c = 0; c < 10; c++)
+        {
+            double frac = res.Hue10Count[c] / total;
+            if (frac <= 0) continue;
+            Color col = res.Hue10Avg[c];
+            if (huePieRepMode)
+            {
+                (int r, int g, int b) = ColorMath.HlsToRgb(c * 36, bL, bS);
+                col = Color.FromRgb((byte)r, (byte)g, (byte)b);
+            }
+            hueItems.Add((frac, col, $"{Hue10Codes[c]} {Hue10Names[c]}：{frac:P1}"));
+        }
+        if (res.PieAchromaticCount > 0)
+        {
+            double frac = res.PieAchromaticCount / total;
+            hueItems.Add((frac, huePieRepMode ? MidGray() : res.PieAchromaticAvg, $"N 無彩色：{frac:P1}"));
+        }
+        DrawPie(HuePieCanvas, hueItems);
+
+        // 色調平衡切換模式＝以 10 色相環的藍（216°）呈現各色調群的代表色調
+        int[] groupRepTone = { 5, 6, 12, 11 }; // 鮮豔→V、明亮→B、昏暗→Dk、暗淡→Dl
+        Color GroupColor(int gI, bool blueMode)
+        {
+            if (!blueMode) return res.GroupAvg[gI];
+            (double l, double s) = Pccs.Tones[groupRepTone[gI]].RepresentativeHls();
+            (int r, int g, int b) = ColorMath.HlsToRgb(216, l, s);
+            return Color.FromRgb((byte)r, (byte)g, (byte)b);
+        }
+
+        // 有彩四大分類（分母＝有彩像素）
+        long chromTotal = res.GroupCount.Sum();
+        var groupItems = new List<(double Frac, Color Color, string Tip)>();
+        if (chromTotal > 0)
+        {
+            for (int gI = 0; gI < 4; gI++)
+            {
+                double frac = res.GroupCount[gI] / (double)chromTotal;
+                if (frac > 0) groupItems.Add((frac, GroupColor(gI, tonePieBlueMode), $"{GroupNames[gI]}色調：{frac:P1}（占有彩）"));
+            }
+        }
+        DrawPie(ToneGroupPieCanvas, groupItems);
+
+        // 四大分類＋無彩色（分母＝全部）
+        var groupNItems = new List<(double Frac, Color Color, string Tip)>();
+        for (int gI = 0; gI < 4; gI++)
+        {
+            double frac = res.GroupCount[gI] / total;
+            if (frac > 0) groupNItems.Add((frac, GroupColor(gI, tonePieNBlueMode), $"{GroupNames[gI]}色調：{frac:P1}"));
+        }
+        if (res.PieAchromaticCount > 0)
+        {
+            double frac = res.PieAchromaticCount / total;
+            groupNItems.Add((frac, tonePieNBlueMode ? MidGray() : res.PieAchromaticAvg, $"無彩色：{frac:P1}"));
+        }
+        DrawPie(ToneGroupNPieCanvas, groupNItems);
+
+        // 明度平衡（不切換）：OkLab L 四階，切片用各區間中點的等亮度灰
+        var lightItems = new List<(double Frac, Color Color, string Tip)>();
+        for (int lI = 0; lI < 4; lI++)
+        {
+            double frac = res.LightnessCount[lI] / total;
+            if (frac <= 0) continue;
+            byte gray = ColorMath.OklabLToGray(0.125 + lI * 0.25);
+            lightItems.Add((frac, Color.FromRgb(gray, gray, gray), $"L {LightBandNames[lI]}：{frac:P1}"));
+        }
+        DrawPie(LightPieCanvas, lightItems);
+
+        static Color MidGray()
+        {
+            (double l, _) = Pccs.Tones[2].RepresentativeHls(); // MG 中灰
+            (int r, int g, int b) = ColorMath.HlsToRgb(0, l, 0);
+            return Color.FromRgb((byte)r, (byte)g, (byte)b);
         }
     }
 
